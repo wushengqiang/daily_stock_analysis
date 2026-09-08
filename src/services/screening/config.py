@@ -117,10 +117,9 @@ def _parse_optional_path_env(name: str) -> Path | None:
 
 
 def _has_tushare_token() -> bool:
-    return bool(
-        os.getenv("TUSHARE_TOKEN", "").strip()
-        or os.getenv("TUSHARE_API_TOKEN", "").strip()
-    )
+    from data_provider.tushare_utils import has_tushare_access
+
+    return has_tushare_access()
 
 
 def _resolve_snapshot_source_priority() -> list[str]:
@@ -178,10 +177,10 @@ class Config:
     llm_rank_weight: float = 0.40
     llm_candidate_multiplier: int = 6
     llm_max_candidates: int = 30
-    llm_max_retries: int = 1
+    llm_max_retries: int = 3
     llm_min_coverage: float = 0.60
     llm_context_max_chars: int = 4000
-    llm_timeout_sec: float = 60.0
+    llm_timeout_sec: float = 180.0
     llm_max_tokens: int = 2048
 
     # Snapshot data source priority
@@ -313,10 +312,10 @@ class Config:
             llm_rank_weight=_parse_float_env("LLM_RANK_WEIGHT", 0.40),
             llm_candidate_multiplier=max(1, int(os.getenv("LLM_CANDIDATE_MULTIPLIER", "6"))),
             llm_max_candidates=max(1, int(os.getenv("LLM_MAX_CANDIDATES", "30"))),
-            llm_max_retries=max(0, int(os.getenv("LLM_MAX_RETRIES", "1"))),
+            llm_max_retries=max(0, int(os.getenv("LLM_MAX_RETRIES", "3"))),
             llm_min_coverage=_parse_float_env("LLM_MIN_COVERAGE", 0.60),
             llm_context_max_chars=max(500, int(os.getenv("LLM_CONTEXT_MAX_CHARS", "4000"))),
-            llm_timeout_sec=max(1.0, _parse_float_env("LLM_TIMEOUT_SEC", 60.0)),
+            llm_timeout_sec=max(1.0, _parse_float_env("LLM_TIMEOUT_SEC", 180.0)),
             llm_max_tokens=max(1, int(os.getenv("LLM_MAX_TOKENS", "2048"))),
             snapshot_source_priority=_resolve_snapshot_source_priority(),
             fallback_snapshot_path=fallback_snapshot_path,

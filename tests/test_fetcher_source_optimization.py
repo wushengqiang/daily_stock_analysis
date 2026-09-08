@@ -111,6 +111,11 @@ class TestFetcherSourceOptimization(unittest.TestCase):
         with patch.dict(
             "os.environ",
             {
+                "TUSHARE_API_MODE": "",
+                "TUSHARE_TOKEN": "",
+                "TUSHARE_API_TOKEN": "",
+                "TUSHARE_RELAY_BASE_URL": "",
+                "TUSHARE_RELAY_KEY": "",
                 "LONGBRIDGE_OAUTH_CLIENT_ID": "",
                 "LONGBRIDGE_APP_KEY": "",
                 "LONGBRIDGE_APP_SECRET": "",

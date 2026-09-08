@@ -21,12 +21,13 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from data_provider.tushare_utils import build_tushare_client, has_tushare_access
+
 from src.services.screening.source_guard import call_with_timeout, parse_source_timeout_seconds
 
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_CACHE_VERSION = 1
-_DEFAULT_TUSHARE_HTTP_URL = "http://api.waditu.com"
 _EM_REQUEST_MIN_INTERVAL_SECONDS = 1.0
 _EM_REQUEST_JITTER_SECONDS = 0.3
 _SOURCE_HEALTH_FAILURE_THRESHOLD = 3
@@ -583,27 +584,41 @@ def _fetch_tushare() -> pd.DataFrame:
     Tushare is not a real-time source here. It is used as a resilient fallback
     by joining the latest open trading day's daily quote and daily_basic data.
     """
-    token = (
-        os.getenv("TUSHARE_TOKEN", "").strip()
-        or os.getenv("TUSHARE_API_TOKEN", "").strip()
-    )
-    if not token:
-        raise RuntimeError("tushare requires TUSHARE_TOKEN")
+    if not has_tushare_access():
+        raise RuntimeError("tushare/relay config unavailable")
 
-    import tushare as ts
-
-    pro = ts.pro_api(token)
-    _configure_tushare_client(pro, token=token)
-    trade_date = _resolve_tushare_trade_date(pro)
-    daily = pro.daily(
-        trade_date=trade_date,
-        fields="ts_code,trade_date,close,pct_chg,amount",
+    client = build_tushare_client()
+    end = date.today()
+    start = end - timedelta(days=14)
+    calendar = client.trade_cal(
+        exchange="",
+        start_date=start.strftime("%Y%m%d"),
+        end_date=end.strftime("%Y%m%d"),
+        is_open="1",
+        fields="cal_date,is_open",
     )
-    daily_basic = pro.daily_basic(
+    trade_dates = sorted(
+        calendar["cal_date"].astype(str).unique().tolist(),
+        reverse=True,
+    )[:5]
+    daily: pd.DataFrame | None = None
+    trade_date = ""
+    for candidate_date in trade_dates:
+        candidate = client.daily(
+            trade_date=candidate_date,
+            fields="ts_code,trade_date,close,pct_chg,amount",
+        )
+        if candidate_date and not candidate.empty:
+            trade_date = candidate_date
+            daily = candidate.copy()
+            break
+    if daily is None or trade_date == "":
+        raise RuntimeError("tushare daily history empty for snapshot")
+    daily_basic = client.daily_basic(
         trade_date=trade_date,
         fields="ts_code,turnover_rate,volume_ratio,pe,pb,total_mv,circ_mv",
     )
-    stock_basic = pro.stock_basic(
+    stock_basic = client.stock_basic(
         exchange="",
         list_status="L",
         fields="ts_code,symbol,name,industry",
@@ -615,43 +630,6 @@ def _fetch_tushare() -> pd.DataFrame:
         raise RuntimeError(f"tushare daily_basic returned empty data for {trade_date}")
 
     return _prepare_tushare_snapshot(daily, daily_basic, stock_basic)
-
-
-def _configure_tushare_client(pro: object, *, token: str) -> None:
-    try:
-        setattr(pro, "_DataApi__token", token)
-    except Exception:
-        pass
-
-    http_url = (
-        os.getenv("TUSHARE_API_URL", "").strip()
-        or os.getenv("TUSHARE_HTTP_URL", "").strip()
-        or _DEFAULT_TUSHARE_HTTP_URL
-    )
-    try:
-        setattr(pro, "_DataApi__http_url", http_url)
-    except Exception:
-        pass
-
-
-def _resolve_tushare_trade_date(pro) -> str:
-    """Return the latest open trade date for Tushare requests."""
-    explicit = os.getenv("TUSHARE_TRADE_DATE", "").strip()
-    if explicit:
-        return explicit
-
-    end = date.today()
-    start = end - timedelta(days=30)
-    calendar = pro.trade_cal(
-        exchange="",
-        start_date=start.strftime("%Y%m%d"),
-        end_date=end.strftime("%Y%m%d"),
-        is_open="1",
-        fields="cal_date,is_open",
-    )
-    if calendar is None or calendar.empty or "cal_date" not in calendar.columns:
-        raise RuntimeError("tushare trade_cal returned no open trading days")
-    return str(calendar["cal_date"].max())
 
 
 def _prepare_tushare_snapshot(

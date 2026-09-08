@@ -18,6 +18,8 @@ from typing import Callable
 import pandas as pd
 import requests
 
+from data_provider.tushare_utils import build_tushare_client, has_tushare_access
+
 from src.services.screening.source_guard import call_with_timeout, parse_source_timeout_seconds
 
 _DAILY_FEATURE_DEFAULTS = {
@@ -52,7 +54,6 @@ _DAILY_HISTORY_CACHE_TTL_SECONDS = 24 * 60 * 60
 _SOURCE_HEALTH_FAILURE_THRESHOLD = 3
 _SOURCE_HEALTH_COOLDOWN_SECONDS = 5 * 60
 _DAILY_CALL_TIMEOUT_SECONDS = 20.0
-_DEFAULT_TUSHARE_HTTP_URL = "http://api.waditu.com"
 _BAOSTOCK_LOCK = threading.Lock()
 _BAOSTOCK_OUTAGE_ERROR: str | None = None
 _SOURCE_HEALTH: dict[str, dict[str, object]] = {}
@@ -644,20 +645,16 @@ def _fetch_daily_sina(code: str, *, lookback_days: int) -> pd.DataFrame:
 
 def _fetch_daily_tushare(code: str, *, lookback_days: int) -> pd.DataFrame:
     """Fetch forward-adjusted daily history via Tushare Pro."""
-    token = _tushare_token()
-    if not token:
-        raise RuntimeError("tushare requires TUSHARE_TOKEN")
+    if not _has_tushare_token():
+        raise RuntimeError("tushare/relay config unavailable")
 
-    import tushare as ts
-
-    pro = ts.pro_api(token)
-    _configure_tushare_client(pro, token=token)
+    client = build_tushare_client()
 
     start_date = (datetime.now() - timedelta(days=max(lookback_days * 2, 90))).strftime("%Y%m%d")
     end_date = datetime.now().strftime("%Y%m%d")
     adj = _normalize_tushare_adj(os.getenv("TUSHARE_DAILY_ADJ", "qfq"))
     ts_code = _to_tushare_code(code)
-    df = pro.daily(
+    df = client.daily(
         ts_code=ts_code,
         start_date=start_date,
         end_date=end_date,
@@ -668,7 +665,7 @@ def _fetch_daily_tushare(code: str, *, lookback_days: int) -> pd.DataFrame:
     if adj is not None:
         df = _apply_tushare_adjustment(
             df,
-            pro=pro,
+        client=client,
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
@@ -679,32 +676,8 @@ def _fetch_daily_tushare(code: str, *, lookback_days: int) -> pd.DataFrame:
     return normalized.tail(max(lookback_days, 30)).copy()
 
 
-def _tushare_token() -> str:
-    return (
-        os.getenv("TUSHARE_TOKEN", "").strip()
-        or os.getenv("TUSHARE_API_TOKEN", "").strip()
-    )
-
-
 def _has_tushare_token() -> bool:
-    return bool(_tushare_token())
-
-
-def _configure_tushare_client(pro: object, *, token: str) -> None:
-    try:
-        setattr(pro, "_DataApi__token", token)
-    except Exception:
-        pass
-
-    http_url = (
-        os.getenv("TUSHARE_API_URL", "").strip()
-        or os.getenv("TUSHARE_HTTP_URL", "").strip()
-        or _DEFAULT_TUSHARE_HTTP_URL
-    )
-    try:
-        setattr(pro, "_DataApi__http_url", http_url)
-    except Exception:
-        pass
+    return has_tushare_access()
 
 
 def _normalize_tushare_daily_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -722,13 +695,13 @@ def _normalize_tushare_daily_frame(df: pd.DataFrame) -> pd.DataFrame:
 def _apply_tushare_adjustment(
     df: pd.DataFrame,
     *,
-    pro: object,
+    client: object,
     ts_code: str,
     start_date: str,
     end_date: str,
     adj: str,
 ) -> pd.DataFrame:
-    factors = pro.adj_factor(
+    factors = client.adj_factor(
         ts_code=ts_code,
         start_date=start_date,
         end_date=end_date,

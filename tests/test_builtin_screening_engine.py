@@ -122,6 +122,19 @@ def test_screening_config_reads_snapshot_cache_ttl() -> None:
     assert config.snapshot_cache_ttl_seconds == 120.0
 
 
+def test_screening_config_defaults_llm_timeout_and_retries() -> None:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"LLM_TIMEOUT_SEC", "LLM_MAX_RETRIES"}
+    }
+    with patch.dict(os.environ, env, clear=True):
+        config = ScreeningRuntimeConfig.from_env()
+
+    assert config.llm_timeout_sec == 180.0
+    assert config.llm_max_retries == 3
+
+
 def test_pipeline_passes_daily_history_cache_settings_to_enrichment(monkeypatch) -> None:
     snapshot_df = pd.DataFrame(
         [

@@ -414,3 +414,28 @@ def test_rank_candidates_with_metadata_reports_all_invalid_models() -> None:
     assert result.failure_reason == "invalid_response"
     assert result.attempted_models == ["deepseek/deepseek-chat", "openai/gpt-4o"]
     assert len(result.errors) == 2
+
+
+def test_rank_candidates_with_metadata_retries_call_failures_before_fallback() -> None:
+    candidates = [Pick(rank=1, code="600519", name="贵州茅台", final_score=90.0, screen_score=90.0)]
+    calls: list[str] = []
+
+    def call_llm(_prompt, _api_key, model, _base_url, **_kwargs):
+        calls.append(model)
+        if len(calls) <= 2:
+            raise TimeoutError("simulated timeout")
+        return _ranking_response("600519")
+
+    with patch("src.services.screening.ranker._call_llm", side_effect=call_llm):
+        result = rank_candidates_with_metadata(
+            candidates,
+            "test hints",
+            "test-key",
+            "openai/gpt-5-mini",
+            fallback_models=["deepseek/deepseek-chat"],
+            max_retries=2,
+        )
+
+    assert result.ranked is True
+    assert result.model_used == "openai/gpt-5-mini"
+    assert calls == ["openai/gpt-5-mini", "openai/gpt-5-mini", "openai/gpt-5-mini"]

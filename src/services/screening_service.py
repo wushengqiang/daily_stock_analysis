@@ -1856,8 +1856,9 @@ def _build_screening_dsa_daily_history_fetcher() -> Optional[Callable[..., Any]]
 
 
 def _resolve_screening_snapshot_source_priority(config: Config) -> str:
-    token = _env_text(getattr(config, "tushare_token", None) or os.getenv("TUSHARE_TOKEN"))
-    if token:
+    from data_provider.tushare_utils import has_tushare_access
+
+    if has_tushare_access(config):
         return DSA_SCREENING_SNAPSHOT_SOURCE_PRIORITY_WITH_TUSHARE
     return DSA_SCREENING_SNAPSHOT_SOURCE_PRIORITY
 

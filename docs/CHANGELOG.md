@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] Tushare 数据源新增 Relay 访问模式：可通过 `TUSHARE_API_MODE=relay` 搭配 `TUSHARE_RELAY_BASE_URL` 与 `TUSHARE_RELAY_KEY` 切换到网关客户端；官方 Pro API 线路保持默认 `tushare` 模式不变。
+- [修复] Tushare/Relay 市场统计改用 `trade_date` 拉取全市场日线，修复通配符请求返回空列导致的 `ts_code` 合并失败；同时兼容股票基础信息缺失时的 `NaN` 名称，避免市场统计中断。
+- [改进] 选股 LLM 请求默认超时时间从 60 秒调整为 180 秒，失败重试次数从 1 次调整为 3 次；`LLM_MAX_RETRIES` 已同步加入 `.env.example` 与选股文档。
+- [修复] 选股 LLM 重排的 `LLM_MAX_RETRIES` 现在同样覆盖超时、400 等调用异常；重试耗尽后才切换 fallback 模型，此前调用异常会直接跳过剩余重试。
 - [测试] 修复股票名称解析冷启动超时并发测试的同步竞态：在放行后台抓取前确认两个等待者均已结束并返回空结果，避免 Docker 发布门禁偶发失败。
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->

@@ -103,6 +103,41 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
 
         # Data not ready, should fall back to Thursday (19th)
         self.assertEqual(result, "20260319")
+
+    def test_get_market_stats_uses_trade_date_and_tolerates_missing_names(self) -> None:
+        fetcher = self._make_fetcher()
+        fetcher._api.trade_cal.return_value = pd.DataFrame(
+            {"cal_date": ["20260317", "20260316"], "is_open": [1, 1]}
+        )
+        fetcher._api.daily.return_value = pd.DataFrame(
+            {
+                "ts_code": ["000001.SZ", "600519.SH"],
+                "trade_date": ["20260317", "20260317"],
+                "close": [11.0, 10.0],
+                "pre_close": [10.0, 10.0],
+                "amount": [1.0, 1.0],
+            }
+        )
+        fetcher._api.stock_basic.return_value = pd.DataFrame(
+            {"ts_code": ["000001.SZ"], "name": ["平安银行"]}
+        )
+
+        with patch.object(
+            fetcher,
+            "_get_china_now",
+            return_value=datetime(2026, 3, 17, 20, 0),
+        ):
+            stats = fetcher.get_market_stats()
+
+        fetcher._api.daily.assert_called_once_with(
+            trade_date="20260317",
+            fields="ts_code,trade_date,close,pre_close,amount",
+        )
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats["up_count"], 1)
+        self.assertEqual(stats["flat_count"], 1)
+        self.assertEqual(stats["limit_up_count"], 1)
+        self.assertEqual(stats["limit_down_count"], 0)
         
           
     def test_get_sector_rankings_rate_limits_calendar_and_rankings_api(self) -> None:

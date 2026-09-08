@@ -160,6 +160,9 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Auto-discover public SearXNG instances from `searx.space` when `SEARXNG_BASE_URLS` is empty (default `false`). Public instances are commonly rate-limited or do not return JSON, so enabling this can add 30-60s per run and still yield no news | Optional |
 | `SEARXNG_TIMEOUT_SECONDS` | Per-search timeout in seconds for self-hosted SearXNG instances (default `10`, minimum `1`). Increase for slow instances (e.g. NAS deployments aggregating many engines); public-instance timeout is unaffected. GitHub Actions requires explicit variable mapping | Optional |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638) Token | Optional |
+| `TUSHARE_API_MODE` | Tushare access mode: `tushare` uses the official Pro API, `relay` uses a Relay gateway | Optional, defaults to `tushare` |
+| `TUSHARE_RELAY_BASE_URL` | Relay gateway service root, such as `https://relay.example.com/tushare/pro`; effective only when `TUSHARE_API_MODE=relay` | Optional |
+| `TUSHARE_RELAY_KEY` | Relay gateway client key sent in the `X-API-Key` header | Optional |
 | `TUSHARE_HTTP_URL` | Tushare Pro HTTP endpoint; when unset/empty defaults to the official `http://api.tushare.pro`. Set to a `http://` or `https://` URL only when routing through a corporate proxy, cross-border network, or a self-hosted mirror | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key for optional A-share daily K-lines, realtime quotes, stock list/name lookup, and CN market review enhancement; permission or entitlement failures fall back to existing providers | Optional |
 

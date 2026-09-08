@@ -879,6 +879,9 @@ class Config:
 
     # === 数据源 API Token ===
     tushare_token: Optional[str] = None
+    tushare_api_mode: str = "tushare"
+    tushare_relay_base_url: Optional[str] = None
+    tushare_relay_key: Optional[str] = None
     tickflow_api_key: Optional[str] = None
     tickflow_kline_adjust: str = "none"
     tickflow_priority: int = 2
@@ -1793,6 +1796,9 @@ class Config:
             feishu_app_secret=os.getenv('FEISHU_APP_SECRET'),
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
+            tushare_api_mode=(os.getenv('TUSHARE_API_MODE') or 'tushare').strip().lower(),
+            tushare_relay_base_url=os.getenv('TUSHARE_RELAY_BASE_URL'),
+            tushare_relay_key=os.getenv('TUSHARE_RELAY_KEY'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
             tickflow_kline_adjust=normalize_tickflow_kline_adjust(os.getenv('TICKFLOW_KLINE_ADJUST')),
             tickflow_priority=parse_env_int(os.getenv('TICKFLOW_PRIORITY'), 2, field_name='TICKFLOW_PRIORITY', minimum=0),
@@ -3123,7 +3129,33 @@ class Config:
                 ))
 
         # --- Data sources (informational only) ---
-        if not self.tushare_token:
+        if (self.tushare_api_mode or "").lower() == "relay":
+            if not (self.tushare_relay_base_url or "").strip():
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=(
+                        "TUSHARE_API_MODE=relay 时必须配置 TUSHARE_RELAY_BASE_URL。"
+                    ),
+                    field="TUSHARE_RELAY_BASE_URL",
+                ))
+            if not (self.tushare_relay_key or "").strip():
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=(
+                        "TUSHARE_API_MODE=relay 时必须配置 TUSHARE_RELAY_KEY。"
+                    ),
+                    field="TUSHARE_RELAY_KEY",
+                ))
+        elif (self.tushare_api_mode or "").lower() != "tushare":
+            issues.append(ConfigIssue(
+                severity="error",
+                message=(
+                    "TUSHARE_API_MODE 仅支持 tushare 或 relay，当前值为 "
+                    f"{self.tushare_api_mode}。"
+                ),
+                field="TUSHARE_API_MODE",
+            ))
+        elif not self.tushare_token:
             issues.append(ConfigIssue(
                 severity="info",
                 message="未配置 Tushare Token，将使用其他数据源",

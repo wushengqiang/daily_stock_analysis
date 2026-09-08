@@ -281,7 +281,9 @@ def is_st_stock(name: str) -> bool:
 
     ST stocks have special trading rules and typically a ±5% limit.
     """
-    n = (name or "").upper()
+    n = str(name or "").strip().upper()
+    if n in {"", "NAN", "NONE", "<NA>"}:
+        return False
     return 'ST' in n
 
 def is_kc_cy_stock(code: str) -> bool:
@@ -1803,8 +1805,9 @@ class DataFetcherManager:
         yfinance = YfinanceFetcher()
         optional_fetchers: List[BaseFetcher] = []
 
-        tushare_token = (getattr(config, "tushare_token", None) or "").strip()
-        if tushare_token:
+        from .tushare_utils import has_tushare_access
+
+        if has_tushare_access(config):
             optional_fetchers.append(TushareFetcher())  # 会根据 Token 配置自动调整优先级
         else:
             logger.debug("[数据源初始化] 跳过未配置的 TushareFetcher")
@@ -4434,10 +4437,25 @@ class DataFetcherManager:
         else:
             capital_flow_budget = min(fetch_timeout, remaining_seconds)
             capital_flow_start = time.time()
+            tushare_payload = None
+            try:
+                from .tushare_flow import get_tushare_capital_flow
+
+                tushare_payload = self._run_with_retry(
+                    lambda: get_tushare_capital_flow(stock_code, timeout=int(capital_flow_budget)),
+                    capital_flow_budget,
+                    "tushare_capital_flow",
+                )[0]
+            except Exception as exc:  # noqa: BLE001 - fail-open to other providers
+                logger.warning(
+                    "Tushare/Relay capital flow failed for %s; falling back to the existing chain: %s",
+                    stock_code,
+                    exc,
+                )
             result_ctx["capital_flow"] = self.get_capital_flow_context(
                 stock_code,
                 budget_seconds=capital_flow_budget,
-            )
+            ) if tushare_payload is None else self._build_fundamental_from_tushare_flow(tushare_payload)
             _consume_budget(int((time.time() - capital_flow_start) * 1000))
 
             dragon_tiger_budget = min(fetch_timeout, remaining_seconds)
@@ -4559,6 +4577,21 @@ class DataFetcherManager:
                 cost_ms,
             ),
             list(payload.get("errors", [])) + ([err] if err else []),
+        )
+
+    @staticmethod
+    def _build_fundamental_from_tushare_flow(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a fundamental block from a Tushare / Relay flow payload."""
+
+        if not isinstance(payload, dict):
+            return DataFetcherManager._build_fundamental_block("failed", {}, [], ["invalid tushare capital flow payload"])
+
+        status = str(payload.get("status", "ok"))
+        return DataFetcherManager._build_fundamental_block(
+            status,
+            payload.get("stock_flow", {}),
+            payload.get("source_chain", []),
+            payload.get("errors", []),
         )
 
     def get_dragon_tiger_context(self, stock_code: str, budget_seconds: Optional[float] = None) -> Dict[str, Any]:

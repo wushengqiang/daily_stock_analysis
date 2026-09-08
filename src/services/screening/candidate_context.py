@@ -10,9 +10,12 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
+import logging
 
 import pandas as pd
 import requests
+
+logger = logging.getLogger(__name__)
 
 _NEGATIVE_EVENT_KEYWORDS = {
     "减持": ("减持", "拟减持", "被动减持"),
@@ -249,6 +252,27 @@ def fetch_stock_announcement_summary(code: str, *, limit: int = 3) -> str:
 
 
 def fetch_stock_fund_flow_summary(code: str) -> str:
+    from data_provider.tushare_utils import has_tushare_access
+
+    if has_tushare_access():
+        try:
+            from data_provider.tushare_flow import get_tushare_capital_flow
+
+            payload = get_tushare_capital_flow(code, timeout=8)
+            stock_flow = payload.get("stock_flow") or {} if payload else {}
+            fields = [
+                _safe_text(stock_flow.get(key))
+                for key in ("query_date", "main_net_inflow", "buy_lg_amount", "sell_lg_amount")
+            ]
+            if any(value for value in fields):
+                return _compress_text(" | ".join(fields), max_len=420)
+        except Exception as exc:
+            logger.warning(
+                "Tushare/Relay fund flow failed for %s; falling back to AkShare: %s",
+                code,
+                exc,
+            )
+
     import akshare as ak
 
     market = _market_for_code(code)

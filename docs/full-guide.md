@@ -167,6 +167,9 @@ daily_stock_analysis/
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `false`）。公共实例普遍限流或未开启 JSON 输出，开启后每次分析可能多耗 30~60 秒且新闻面为空 | 可选 |
 | `SEARXNG_TIMEOUT_SECONDS` | 自建 SearXNG 单次搜索超时（秒，默认 `10`，最小 `1`）；实例较慢（如聚合引擎较多的 NAS 部署）时可调大，公共实例超时不受影响。GitHub Actions 需显式映射该变量 | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
+| `TUSHARE_API_MODE` | Tushare 访问模式：`tushare` 使用官方 Pro API，`relay` 使用 Relay 网关 | 可选，默认 `tushare` |
+| `TUSHARE_RELAY_BASE_URL` | Relay 网关服务根地址，例如 `https://relay.example.com/tushare/pro`；仅在 `TUSHARE_API_MODE=relay` 时生效 | 可选 |
+| `TUSHARE_RELAY_KEY` | Relay 网关客户端 Key，随普通数据接口放在 `X-API-Key` Header 中 | 可选 |
 | `TUSHARE_HTTP_URL` | Tushare Pro HTTP 接入地址；留空（或未设置/空白）时使用官方端点 `http://api.tushare.pro`，仅在需通过公司内网代理、跨境网络或自建镜像时填写 `http://` 或 `https://` 开头的完整地址 | 可选 |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API Key；可选，用于 A 股日 K、实时行情、股票列表/名称与大盘复盘增强；失败或权限不足时自动回退。 | 可选 |
 | `LONGBRIDGE_OAUTH_CLIENT_ID` | [Longbridge OpenAPI](https://open.longbridge.com/) OAuth client_id；留空且无 Legacy Access Token 时会兼容使用 `LONGBRIDGE_APP_KEY` | 可选 |

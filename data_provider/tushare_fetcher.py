@@ -36,6 +36,7 @@ from .realtime_types import UnifiedRealtimeQuote, ChipDistribution
 from src.config import get_config
 import os
 from zoneinfo import ZoneInfo
+from .tushare_relay_client import TushareRelayClient
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,51 @@ class _TushareHttpClient:
         return caller
 
 
+_TUSHARE_API_MODES = ("tushare", "relay")
+
+
+def _resolve_tushare_api_mode(config: Any = None) -> str:
+    """Return the normalized Tushare access mode from config or environment."""
+
+    raw = getattr(config, "tushare_api_mode", None)
+    if raw in (None, ""):
+        raw = os.getenv("TUSHARE_API_MODE")
+    mode = str(raw or "tushare").strip().lower()
+    if mode not in _TUSHARE_API_MODES:
+        raise ValueError(
+            "TUSHARE_API_MODE 仅支持 tushare 或 relay，当前值为 "
+            f"{raw!r}"
+        )
+    return mode
+
+
+def _resolve_relay_base_url(config: Any) -> str:
+    """Read and validate the Relay base URL from config or environment."""
+
+    raw = getattr(config, "tushare_relay_base_url", None)
+    if raw in (None, ""):
+        raw = os.getenv("TUSHARE_RELAY_BASE_URL")
+    if not raw:
+        raise ValueError("TUSHARE_API_MODE=relay 时必须配置 TUSHARE_RELAY_BASE_URL")
+
+    url = str(raw).strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError(
+            "TUSHARE_RELAY_BASE_URL 必须以 http:// 或 https:// 开头，"
+            f"当前值为 {url!r}"
+        )
+    return url
+
+
+def _resolve_relay_api_key(config: Any) -> str:
+    """Read the Relay client key shared through ``X-API-Key``."""
+
+    raw = getattr(config, "tushare_relay_key", None)
+    if raw in (None, ""):
+        raw = os.getenv("TUSHARE_RELAY_KEY")
+    return str(raw or "").strip()
+
+
 class TushareFetcher(BaseFetcher):
     """
     Tushare Pro 数据源实现
@@ -181,8 +227,13 @@ class TushareFetcher(BaseFetcher):
         从而减少 Docker / PyInstaller / 多虚拟环境场景下因缺包导致的初始化失败。
         """
         config = get_config()
+        api_mode = _resolve_tushare_api_mode(config)
 
-        if not config.tushare_token:
+        if api_mode == "relay":
+            if not _resolve_relay_base_url(config) or not _resolve_relay_api_key(config):
+                logger.warning("Tushare Relay Base URL 或 Key 未配置，此数据源不可用")
+                return
+        elif not config.tushare_token:
             logger.warning("Tushare Token 未配置，此数据源不可用")
             return
 
@@ -193,7 +244,7 @@ class TushareFetcher(BaseFetcher):
             logger.error(f"Tushare API 初始化失败: {e}")
             self._api = None
 
-    def _build_api_client(self, token: str) -> _TushareHttpClient:
+    def _build_api_client(self, token: str) -> _TushareHttpClient | TushareRelayClient:
         """
         Build a lightweight Tushare Pro client over direct HTTP requests.
 
@@ -204,12 +255,24 @@ class TushareFetcher(BaseFetcher):
         端点，便于在网络无法直达 ``api.tushare.pro`` 时切换镜像/网关。
         留空或不设置则保持官方默认地址，行为与历史版本完全一致。
         """
-        api_url = _resolve_tushare_http_url()
-        if api_url:
-            logger.info("Tushare 使用自定义接入地址: %s", api_url)
-            client = _TushareHttpClient(token=token, api_url=api_url)
+        config = get_config()
+        api_mode = _resolve_tushare_api_mode(config)
+        if api_mode == "relay":
+            base_url = _resolve_relay_base_url(config)
+            api_key = _resolve_relay_api_key(config)
+            if not api_key:
+                raise DataFetchError(
+                    "TUSHARE_API_MODE=relay 时必须配置 TUSHARE_RELAY_KEY"
+                )
+            client = TushareRelayClient(api_key=api_key, base_url=base_url)
+            logger.info("Tushare 使用 Relay 接入地址: %s", base_url)
         else:
-            client = _TushareHttpClient(token=token)
+            api_url = _resolve_tushare_http_url()
+            if api_url:
+                logger.info("Tushare 使用自定义接入地址: %s", api_url)
+                client = _TushareHttpClient(token=token, api_url=api_url)
+            else:
+                client = _TushareHttpClient(token=token)
         logger.debug("Tushare API client configured for direct HTTP calls")
         return client
 
@@ -226,7 +289,13 @@ class TushareFetcher(BaseFetcher):
         """
         config = get_config()
 
-        if config.tushare_token and self._api is not None:
+        api_mode = _resolve_tushare_api_mode(config)
+        access_ready = (
+            config.tushare_token
+            if api_mode == "tushare"
+            else (_resolve_relay_api_key(config) and _resolve_relay_base_url(config))
+        )
+        if access_ready and self._api is not None:
             # Token 配置且 API 初始化成功，提升为最高优先级
             logger.info("✅ 检测到 TUSHARE_TOKEN 且 API 初始化成功，Tushare 数据源优先级提升为最高 (Priority -1)")
             return -1
@@ -932,15 +1001,22 @@ class TushareFetcher(BaseFetcher):
                 try:
                     df = self._call_api_with_rate_limit(
                         "daily",
-                        ts_code='3*.SZ,6*.SH,0*.SZ,92*.BJ',
-                        start_date=last_date,
-                        end_date=last_date,
+                        trade_date=last_date,
+                        fields='ts_code,trade_date,close,pre_close,amount',
                     )
                     # 为防止不同接口返回的列名大小写不一致（例如 rt_k 返回小写，daily 返回大写），统一将列名转为小写
                     df.columns = [col.lower() for col in df.columns]
 
                     # 获取股票基础信息（包含代码和名称）
                     df_basic = self._call_api_with_rate_limit("stock_basic", fields='ts_code,name')
+                    if df_basic is None or df_basic.empty or 'ts_code' not in df_basic.columns:
+                        raise DataFetchError(
+                            f"Tushare stock_basic response missing required field ts_code for {last_date}"
+                        )
+                    if 'ts_code' not in df.columns:
+                        raise DataFetchError(
+                            f"Tushare daily response missing required field ts_code for {last_date}"
+                        )
                     df = pd.merge(df, df_basic, on='ts_code', how='left')
                     # 将 daily的 amount 列的值乘以 1000 来和其他数据源保持一致
                     if 'amount' in df.columns:

@@ -274,6 +274,9 @@ jobs:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           # Tushare Pro 自定义接入地址（可选；指向自建网关或第三方兼容镜像时设置）
           TUSHARE_HTTP_URL: ${{ vars.TUSHARE_HTTP_URL || secrets.TUSHARE_HTTP_URL }}
+          TUSHARE_API_MODE: ${{ vars.TUSHARE_API_MODE || secrets.TUSHARE_API_MODE }}
+          TUSHARE_RELAY_BASE_URL: ${{ vars.TUSHARE_RELAY_BASE_URL || secrets.TUSHARE_RELAY_BASE_URL }}
+          TUSHARE_RELAY_KEY: ${{ secrets.TUSHARE_RELAY_KEY }}
           # TickFlow（A 股日 K、实时行情、股票列表/名称与大盘复盘增强；不设则走免费源 fallback）
           TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
           TICKFLOW_PRIORITY: ${{ vars.TICKFLOW_PRIORITY || secrets.TICKFLOW_PRIORITY }}
@@ -477,6 +480,7 @@ jobs:
           echo ""
           echo "【数据源】"
           echo "  Tushare Token: $([ -n "$TUSHARE_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  Tushare Mode: ${TUSHARE_API_MODE:-tushare}"
           echo "  TickFlow:      $([ -n "$TICKFLOW_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           if [ -n "$LONGBRIDGE_APP_KEY" ] && [ -n "$LONGBRIDGE_APP_SECRET" ] && [ -n "$LONGBRIDGE_ACCESS_TOKEN" ]; then
             echo "  Longbridge: ✅ 已配置（Legacy API Key）"

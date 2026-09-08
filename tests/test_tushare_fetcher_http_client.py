@@ -69,7 +69,12 @@ class TestTushareFetcherInit(unittest.TestCase):
     """Ensure fetcher initialization no longer depends on the tushare SDK package."""
 
     def test_init_builds_http_client_when_token_present(self) -> None:
-        config = SimpleNamespace(tushare_token="demo-token")
+        config = SimpleNamespace(
+            tushare_token="demo-token",
+            tushare_api_mode="tushare",
+            tushare_relay_base_url="",
+            tushare_relay_key="",
+        )
 
         with patch("data_provider.tushare_fetcher.get_config", return_value=config):
             fetcher = TushareFetcher()
@@ -111,7 +116,12 @@ class TestTushareFetcherCustomHttpUrl(unittest.TestCase):
     """``TUSHARE_HTTP_URL`` 真正打通到 HTTP client 的接入地址。"""
 
     def test_fetcher_uses_custom_url_when_env_set(self) -> None:
-        config = SimpleNamespace(tushare_token="demo-token")
+        config = SimpleNamespace(
+            tushare_token="demo-token",
+            tushare_api_mode="tushare",
+            tushare_relay_base_url="",
+            tushare_relay_key="",
+        )
 
         with patch("data_provider.tushare_fetcher.get_config", return_value=config), \
                 patch.dict("os.environ", {"TUSHARE_HTTP_URL": "http://gw.example.com/tushare"}):
@@ -121,7 +131,12 @@ class TestTushareFetcherCustomHttpUrl(unittest.TestCase):
         self.assertEqual(fetcher._api._api_url, "http://gw.example.com/tushare")
 
     def test_fetcher_falls_back_to_official_when_env_empty(self) -> None:
-        config = SimpleNamespace(tushare_token="demo-token")
+        config = SimpleNamespace(
+            tushare_token="demo-token",
+            tushare_api_mode="tushare",
+            tushare_relay_base_url="",
+            tushare_relay_key="",
+        )
 
         env = {k: v for k, v in __import__("os").environ.items() if k != "TUSHARE_HTTP_URL"}
         with patch("data_provider.tushare_fetcher.get_config", return_value=config), \
@@ -133,7 +148,12 @@ class TestTushareFetcherCustomHttpUrl(unittest.TestCase):
 
     def test_query_posts_to_custom_endpoint(self) -> None:
         """端到端确保自定义 url 真正驱动 requests.post 的目标地址。"""
-        config = SimpleNamespace(tushare_token="demo-token")
+        config = SimpleNamespace(
+            tushare_token="demo-token",
+            tushare_api_mode="tushare",
+            tushare_relay_base_url="",
+            tushare_relay_key="",
+        )
 
         with patch("data_provider.tushare_fetcher.get_config", return_value=config), \
                 patch.dict("os.environ", {"TUSHARE_HTTP_URL": "http://gw.example.com/tushare"}):
